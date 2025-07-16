@@ -6,6 +6,6 @@ app_name = 'quiz'
 
 router = DefaultRouter()
 router.register(r'question', QuestionViewSet, basename='questions')
-router.register(r'history', HistoryViewSet, basename='answer')
+router.register(r'history', HistoryViewSet, basename='history')
 
 urlpatterns = router.urls

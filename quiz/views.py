@@ -3,11 +3,11 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework import status
-from django.utils import timezone
 from django.db.models import OuterRef, Exists
+from django.db.models.functions import Lower, Trim
 
 from quiz.api.serializers import QuestionSerializer, AnswerSerializer, QuizHistorySerializer
-from quiz.models import Question, QuizHistory
+from quiz.models import Question, QuizHistory, UserAnswer
 
 
 class QuestionViewSet(viewsets.ModelViewSet):
@@ -38,18 +38,33 @@ class QuestionViewSet(viewsets.ModelViewSet):
         question = self.get_object()
         serializer = AnswerSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        user_answer_text = serializer.validated_data['text'].strip().lower()
+        user = request.user
 
-        user_answer = serializer.validated_data['answer'].strip()
-        is_correct = user_answer.lower() == question.answer.lower()
+        correct_answer = None
+        for ans in question.answers.all():
+            if ans.text.strip().lower() == user_answer_text:
+                correct_answer = ans
+                break
+        if not correct_answer:
+            return Response({"correct": False}, status=status.HTTP_200_OK)
 
-        if is_correct:
+        UserAnswer.objects.get_or_create(
+            user=user,
+            question=question,
+            answer=correct_answer
+        )
+
+        total_correct_answers = question.answers.count()
+        user_correct_answers = UserAnswer.objects.filter(user=user, question=question).count()
+
+        if user_correct_answers == total_correct_answers:
             QuizHistory.objects.get_or_create(
-                user=request.user,
+                user=user,
                 question=question,
-                defaults={'answered_at': timezone.now()}
             )
 
-        return Response({"correct": is_correct}, status=status.HTTP_200_OK)
+        return Response({"correct": True}, status=status.HTTP_200_OK)
 
 
 class HistoryViewSet(viewsets.ModelViewSet):
